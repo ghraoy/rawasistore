@@ -5,6 +5,18 @@ const LS = { cart: 'rawasi.shop.cart', fav: 'rawasi.shop.fav', buyer: 'rawasi.sh
 const $ = (s, r = document) => r.querySelector(s);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const money = (n) => Math.round(Number(n) || 0).toLocaleString('en-US') + ' د.ع';
+// أسعار الكمية (قسم التوزيعات): 50 قطعة بسعر، 100 قطعة بسعر أقل…
+const isBulk = (p) => !!(p && p.tiers && p.tiers.length);
+const tierFor = (p, qty) => {
+  let best = null;
+  for (const t of (p && p.tiers) || []) if (qty >= t.qty) best = t;
+  return best;
+};
+const lineTotal = (p, qty) => {
+  const t = tierFor(p, qty);
+  return Math.round(t ? (qty * t.price) / t.qty : qty * p.price);
+};
+const unitOf = (p, qty) => (qty ? lineTotal(p, qty) / qty : p.price);
 const read = (k, d) => {
   try {
     const v = JSON.parse(localStorage.getItem(k));
@@ -125,7 +137,7 @@ function cartLines() {
 }
 function cartTotals() {
   const lines = cartLines().filter((l) => l.p.status !== 'out');
-  const items = lines.reduce((s, l) => s + Math.min(l.qty, l.p.max) * l.p.price, 0);
+  const items = lines.reduce((s, l) => s + lineTotal(l.p, Math.min(l.qty, l.p.max)), 0);
   const count = lines.reduce((s, l) => s + Math.min(l.qty, l.p.max), 0);
   const fee = count ? Number(state.data?.store?.deliveryFee) || 0 : 0;
   return { lines, items, count, fee, total: items + fee };
@@ -195,7 +207,8 @@ function card(p, i = 0) {
     </div>
     <div class="card-body">
       <a class="card-name" href="${href}">${esc(p.name)}</a>
-      <div class="card-foot"><div class="card-price">${priceHtml(p)}</div>${p.status === 'out' ? '' : `<button type="button" class="quick" data-add="${esc(p.id)}" aria-label="أضف ${esc(p.name)} للسلة">${icon('plus', 18)}</button>`}</div>
+      ${isBulk(p) ? `<small class="card-tier">${p.tiers.map((t) => `${t.qty} قطعة بـ ${money(t.price)}`).join(' · ')}</small>` : ''}
+      <div class="card-foot"><div class="card-price">${priceHtml(p)}${isBulk(p) ? '<small class="per">للقطعة</small>' : ''}</div>${p.status === 'out' ? '' : isBulk(p) ? `<a class="quick" href="${href}" aria-label="اختار كمية ${esc(p.name)}">${icon('plus', 18)}</a>` : `<button type="button" class="quick" data-add="${esc(p.id)}" aria-label="أضف ${esc(p.name)} للسلة">${icon('plus', 18)}</button>`}</div>
     </div>
   </article>`;
 }
@@ -403,14 +416,21 @@ function productHtml(p) {
         <div class="pd-price">${priceHtml(p, 'big')}${p.was ? `<span class="save">توفّر ${money(p.was - p.price)}</span>` : ''}</div>
         <p class="pd-stock st-${p.status}">${p.status === 'out' ? 'نفدت هذه القطعة. تابعنا على الانستقرام حتى تعرف إذا رجعت.' : p.status === 'low' ? (p.left === 1 ? 'آخر قطعة متوفرة' : `باقي ${p.left} قطع فقط`) : 'متوفرة'}${p.drop && p.status !== 'out' ? '، ضمن النزلة الحالية' : ''}</p>
         ${p.desc ? `<p class="pd-desc">${esc(p.desc).replace(/\n/g, '<br>')}</p>` : ''}
+        ${isBulk(p) ? `<div class="tiers" role="group" aria-label="أسعار الكمية">
+          <b class="tiers-title">أسعار الكمية للتوزيعات</b>
+          <div class="tiers-row">
+            ${p.tiers.map((t) => `<button type="button" class="tier" data-setq="${t.qty}"${p.status !== 'out' && t.qty > p.max ? ' disabled' : ''}><span>${t.qty} قطعة</span><b>${money(t.price)}</b><small>${money(Math.round(t.price / t.qty))} للقطعة</small></button>`).join('')}
+          </div>
+          ${p.status !== 'out' && p.tiers.some((t) => t.qty > p.max) ? `<small class="muted">المتوفر حالياً ${p.max} قطعة.</small>` : ''}
+        </div>` : ''}
         ${p.status === 'out' ? '' : `<div class="buy">
           <div class="stepper" role="group" aria-label="الكمية">
             <button type="button" data-step="1" aria-label="زيادة">${icon('plus', 18)}</button>
-            <output id="pQty" aria-live="polite">1</output>
+            ${isBulk(p) ? `<input id="pQty" class="qty-in" inputmode="numeric" aria-label="العدد" value="${Math.min(p.max, (p.tiers.find((t) => t.qty <= p.max) || { qty: 1 }).qty)}">` : '<output id="pQty" aria-live="polite">1</output>'}
             <button type="button" data-step="-1" aria-label="نقصان">${icon('minus', 18)}</button>
           </div>
           <button type="button" class="btn btn-buy" data-addq="${esc(p.id)}">${icon('bag', 20)}<span>${inCart ? `أضف للسلة (فيها ${inCart})` : 'أضف للسلة'}</span></button>
-        </div>`}
+        </div>${isBulk(p) ? '<p class="p-total" id="pTotal" aria-live="polite"></p>' : ''}`}
         <div class="pd-actions">
           <button type="button" class="btn-text${fav ? ' on' : ''}" data-fav="${esc(p.id)}" aria-pressed="${fav}">${icon('heart', 18)}<span>المفضلة</span></button>
           <button type="button" class="btn-text" data-share="${esc(p.id)}">${icon('share', 18)}<span>مشاركة</span></button>
@@ -438,11 +458,11 @@ function cartHtml() {
           <a class="line-img" href="#/p/${encodeURIComponent(l.p.id)}">${photo(l.p, { cls: 'thumb' })}</a>
           <div class="line-body">
             <b>${esc(l.p.name)}</b>
-            <span class="line-price">${money(l.p.price)}</span>
+            <span class="line-price">${isBulk(l.p) ? `${money(Math.round(unitOf(l.p, Math.min(l.qty, l.p.max))))} للقطعة · المجموع ${money(lineTotal(l.p, Math.min(l.qty, l.p.max)))}${tierFor(l.p, Math.min(l.qty, l.p.max)) ? ' <small class="tier-on">سعر الكمية</small>' : ''}` : money(l.p.price)}</span>
             ${out ? '<span class="warn">نفدت، شيلها من السلة</span>' : over ? `<span class="warn">المتوفر صار ${l.p.max} فقط</span>` : ''}
             ${out ? '' : `<div class="stepper sm" role="group" aria-label="كمية ${esc(l.p.name)}">
               <button type="button" data-cq="${esc(l.p.id)}" data-d="1" aria-label="زيادة" ${l.qty >= l.p.max ? 'disabled' : ''}>${icon('plus', 16)}</button>
-              <output>${Math.min(l.qty, l.p.max)}</output>
+              ${isBulk(l.p) ? `<input class="qty-in" inputmode="numeric" data-cqset="${esc(l.p.id)}" aria-label="العدد" value="${Math.min(l.qty, l.p.max)}">` : `<output>${Math.min(l.qty, l.p.max)}</output>`}
               <button type="button" data-cq="${esc(l.p.id)}" data-d="-1" aria-label="نقصان">${icon('minus', 16)}</button>
             </div>`}
           </div>
@@ -499,7 +519,10 @@ function checkoutHtml() {
 function orderText(buyer, ref) {
   const s = state.data.store;
   const t = cartTotals();
-  const lines = t.lines.map((l, i) => `${i + 1}. ${l.p.name} × ${Math.min(l.qty, l.p.max)} — ${money(l.p.price * Math.min(l.qty, l.p.max))}`);
+  const lines = t.lines.map((l, i) => {
+    const q = Math.min(l.qty, l.p.max);
+    return `${i + 1}. ${l.p.name} × ${q} — ${money(lineTotal(l.p, q))}${tierFor(l.p, q) ? ' (سعر الكمية)' : ''}`;
+  });
   return [
     `حجز من موقع ${s.name} (${ref})`,
     '',
@@ -564,10 +587,25 @@ function renderLayer() {
     first?.focus({ preventScroll: true });
     layer.querySelector('.sheet')?.scrollTo?.(0, 0);
     bindGallery();
+    updPTotal();
   } else if (lastFocus) {
     lastFocus.focus?.({ preventScroll: true });
     lastFocus = null;
   }
+}
+
+// المجموع الحي بصفحة منتج التوزيعات حسب العدد
+function updPTotal() {
+  const el = $('#pQty');
+  const out = $('#pTotal');
+  const p = byId(state.route.id);
+  if (!el || !out || !isBulk(p)) return;
+  const q = Math.max(0, Math.floor(Number(String(el.value).replace(/[٠-٩]/g, (c) => '٠١٢٣٤٥٦٧٨٩'.indexOf(c))) || 0));
+  const t = tierFor(p, q);
+  for (const b of document.querySelectorAll('.tier')) b.classList.toggle('on', !!t && Number(b.dataset.setq) === t.qty);
+  if (!q) return (out.textContent = '');
+  const over = q > p.max ? ` المتوفر ${p.max} فقط.` : '';
+  out.innerHTML = `${q} قطعة = <b>${money(lineTotal(p, Math.min(q, p.max)))}</b>${t ? ` <span class="tier-on">سعر الكمية</span>` : ''} <small>(${money(Math.round(unitOf(p, Math.min(q, p.max))))} للقطعة)</small>${over}`;
 }
 
 function bindGallery() {
@@ -643,8 +681,14 @@ function bind() {
     }
     if (d.fav) return toggleFav(d.fav);
     if (d.add) return addToCart(d.add, 1);
+    if (d.setq) {
+      const el = $('#pQty');
+      if (el) el.value = d.setq;
+      return updPTotal();
+    }
     if (d.addq) {
-      const q = Number($('#pQty')?.textContent) || 1;
+      const qe = $('#pQty');
+      const q = Number(qe?.value ?? qe?.textContent) || 1;
       addToCart(d.addq, q);
       return renderLayer();
     }
@@ -652,8 +696,11 @@ function bind() {
       const out = $('#pQty');
       const p = byId(state.route.id);
       if (!out || !p) return;
-      out.textContent = Math.max(1, Math.min(p.max - cartQty(p.id) || 1, (Number(out.textContent) || 1) + Number(d.step)));
-      return;
+      const cur = Number(out.value ?? out.textContent) || 1;
+      const next = Math.max(1, Math.min(p.max - cartQty(p.id) || 1, cur + Number(d.step)));
+      if ('value' in out && out.tagName === 'INPUT') out.value = next;
+      else out.textContent = next;
+      return updPTotal();
     }
     if (d.cq) {
       setQty(d.cq, cartQty(d.cq) + Number(d.d));
@@ -717,6 +764,7 @@ function bind() {
   });
 
   document.addEventListener('input', (e) => {
+    if (e.target.id === 'pQty') return updPTotal();
     if (e.target.id === 'q') {
       state.q = e.target.value.trim();
       clearTimeout(bind.qt);
@@ -727,6 +775,12 @@ function bind() {
     }
   });
   document.addEventListener('change', (e) => {
+    if (e.target.dataset?.cqset) {
+      const v = Math.max(0, Math.floor(Number(String(e.target.value).replace(/[٠-٩]/g, (c) => '٠١٢٣٤٥٦٧٨٩'.indexOf(c))) || 0));
+      setQty(e.target.dataset.cqset, v);
+      clampCart();
+      return renderLayer();
+    }
     if (e.target.id === 'sort') {
       state.sort = e.target.value;
       renderMain();

@@ -334,3 +334,23 @@ a.hero-media:hover .hero-img { transform: scale(1.03); }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; scroll-behavior: auto !important; }
 }
+
+/* ---------- أسعار الكمية (التوزيعات) ---------- */
+.card-tier { display: block; color: var(--accent); font-size: 12.5px; font-weight: 600; line-height: 1.5; }
+.card-price .per { color: var(--muted); font-size: 12.5px; }
+a.quick { text-decoration: none; }
+.tiers { display: grid; gap: 10px; padding: 14px; border-radius: var(--r); background: var(--accent-soft); }
+.tiers-title { font-size: 15px; }
+.tiers-row { display: flex; flex-wrap: wrap; gap: 8px; }
+.tier { flex: 1 1 120px; display: grid; gap: 2px; justify-items: start; text-align: start; padding: 10px 14px; border-radius: var(--r-sm); border: 0; background: var(--surface); box-shadow: inset 0 0 0 1.5px transparent; transition: box-shadow .15s; }
+.tier span { font-size: 14px; color: var(--ink-2); }
+.tier b { font-size: 17px; }
+.tier small { color: var(--muted); font-size: 12.5px; }
+.tier:hover:not(:disabled), .tier.on { box-shadow: inset 0 0 0 2px var(--accent); }
+.tier:disabled { opacity: .45; cursor: not-allowed; }
+.qty-in { width: 64px; height: 100%; border: 0; background: transparent; text-align: center; font-weight: 700; font-size: 16px; font-variant-numeric: tabular-nums; outline: none; }
+.stepper.sm .qty-in { width: 52px; font-size: 15px; }
+.qty-in:focus { box-shadow: inset 0 -2px 0 var(--accent); }
+.p-total { color: var(--ink-2); font-size: 15px; margin-top: -2px; }
+.p-total b { color: var(--ink); font-size: 17px; }
+.tier-on { display: inline-block; padding: 1px 9px; border-radius: 999px; background: var(--accent-soft); color: var(--accent); font-size: 12px; font-weight: 600; }
